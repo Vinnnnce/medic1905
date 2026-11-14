@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { HomeAdsCarousel } from "@/components/home/home-ads-carousel";
+import { DownloadCentre } from "@/components/download/download-centre";
 import { HomeSingleAdBanner } from "@/components/home/home-single-ad-banner";
 import {
   IMEDICS_AUDIENCES, IMEDICS_BENEFITS, IMEDICS_CONTACT, IMEDICS_FAQS,
@@ -994,6 +995,8 @@ export function ImedicsHomepage({
           {IMEDICS_IMAGE_CREDITS.join(" · ")}
         </div>
       </footer>
+
+      <DownloadCentre compact />
     </div>
   );
 }
