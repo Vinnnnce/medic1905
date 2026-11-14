@@ -44,11 +44,14 @@ Full SQL: `server/db/schema.sql`.
   "interventions": { "aspirin": { "sbp": -4 }, "morphine": { "pain": -4 } },
   "complications": [ { "id": "vf_arrest", "trigger": { "phase": 1, "afterMin": 8, "ifNotDone": ["ecg"] }, "vitals": {}, "requires": "defib", "deathAfterMin": 4 } ],
   "rubric": { "history": { "points": 10, "criteria": [] }, "management": { "points": 20, "criteria": [] } },
-  "debrief": { "summary": "...", "learningPoints": [], "references": [] }
+  "debrief": { "summary": "...", "learningPoints": [], "references": [] },
+  "theatre": { "procedure": "...", "anaesthesia": "...", "asa": "ASA II", "risks": ["Bleeding", "Infection", "..."], "steps": ["WHO sign-in: ...", "Time-out: ...", "..."] }
 }
 ```
 
 Management step types: `drug` (matched by formulary name), `imaging`/`lab` (matched by catalog key), `procedure` (matched by keyword overlap with learner free text), `oxygen`, `admit`.
+
+The optional `theatre` block activates the surgical theatre module for a case (see §5a). Paediatric cases add `"paediatric_parent": true` to `emotions` so parent-voice interview answers are attributed to the accompanying adult.
 
 ## 5. API surface
 
@@ -58,8 +61,18 @@ Management step types: `drug` (matched by formulary name), `imaging`/`lab` (matc
 - `GET /api/catalog/labs|imaging|drugs`
 - `POST /api/runs`, `GET /api/runs`, `GET /api/runs/:id`, `GET /api/runs/:id/state` (polling)
 - `POST /api/runs/:id/chat`, `/exam`, `/orders`, `/prescribe`, `/actions` (oxygen, procedure, defib, diagnosis, admit, note, observation), `GET /api/runs/:id/orders`, `POST /api/runs/:id/end`
+- `POST /api/runs/:id/theatre` (actions: `preop`, `consent`, `team`, `signin`, `timeout`, `signout`, `step`, `report`) — surgical theatre workflow, gated to cases with a `theatre` block
+- `GET /api/runs/:id/studies` — simulated PACS study list (DICOM-style metadata for every resulted imaging order)
 - `GET /api/instructor/runs`, `POST /api/instructor/runs/:id/control` (pause|resume|inject|set_phase)
 - `GET /api/admin/stats|users|audit`, `PUT /api/admin/users/:id/role`, `GET /api/admin/learners/:id/report`
+
+## 5a. Surgical theatre module
+
+Cases may carry a `theatre` block: `{ procedure, anaesthesia, asa, risks[], steps[] }`. When present, the encounter shows a Theatre tab with an eight-stage deterministic workflow: preoperative assessment (ASA, airway, fasting, comorbidities, allergy confirmation) → consent simulation (must-discuss procedure-specific risks, alternatives, signatures) → team assignment → WHO Surgical Safety Checklist sign-in / time-out / sign-out → procedure steps with strict correct-order validation (out-of-sequence steps are rejected) → operative report (findings, swab counts, complications). Scoring is fully deterministic (`server/engines/theatre.js`); completing the module credits matching surgical management steps in the physiology engine. Nothing in the theatre flow is AI-generated — all clinical content comes from the case's theatre block.
+
+## 5b. DICOM viewer & simulated PACS
+
+Every resulted imaging order carries simulated PACS metadata (accession number, Study/Series Instance UIDs under a Medic1905 simulation root, modality, body part, deterministic seed). The client DICOM viewer (`client/assets/js/pages/dicom.js`) renders procedural synthetic images per modality (CR radiographs, CT axial slices, US sectors, ECG traces, MR, NM) from a seeded PRNG — the same seed always renders the same study. The viewer supports window/level, zoom, pan, invert, series list and a DICOM metadata panel. All studies are labelled as simulated at every layer; no real patient data exists in the platform.
 
 ## 6. Roles & permissions
 

@@ -9,6 +9,7 @@ const physiology = require('../engines/physiology');
 const conversation = require('../engines/conversation');
 const safety = require('../engines/safety');
 const scoring = require('../engines/scoring');
+const theatreEngine = require('../engines/theatre');
 
 const router = express.Router();
 router.use(authMiddleware());
@@ -37,6 +38,7 @@ router.post('/runs', (req, res) => {
   if (!c || c.status !== 'published') return res.status(404).json({ error: 'Case not found or not published' });
   const scenario = JSON.parse(c.scenario);
   const state = physiology.newState(scenario, Date.now());
+  state.theatre = theatreEngine.createTheatre(scenario);
   const id = db.prepare('INSERT INTO case_runs (case_id, learner_id, status, state) VALUES (?,?,?,?)')
     .run(c.id, req.user.id, 'active', JSON.stringify(state)).lastInsertRowid;
   db.prepare('INSERT INTO run_participants (run_id, user_id, role_in_case) VALUES (?,?,?)').run(id, req.user.id, 'learner');
@@ -106,6 +108,8 @@ router.get('/runs/:id', (req, res) => {
     case: { id: ctx.caseRow.id, title: ctx.caseRow.title, difficulty: ctx.caseRow.difficulty, specialty: ctx.caseRow.specialty },
     patient: ctx.scenario.patient,
     allergies: ctx.scenario.history.allergies || [],
+    hasTheatre: !!(ctx.scenario.theatre && state.theatre),
+    theatre: state.theatre || null,
     state: viewState(ctx, state, true),
     examsPerformed: state.examsPerformed || [],
     chat, orders: orders.map(o => ({ ...o, result: o.result ? JSON.parse(o.result) : null })),
@@ -210,7 +214,10 @@ function buildResult(scenario, state, order) {
   if (order.kind === 'imaging') {
     const defined = (scenario.imaging || {})[order.item_key];
     const finding = defined ? defined.finding : 'Unremarkable study. No acute pathology identified.';
-    return { name, modality: cat ? cat.modality : '—', finding, phaseVisible: defined ? defined.phases.includes(state.phase) : true, critical: /occlusion|active|rupture|embol|elevat/i.test(finding) && !!defined };
+    const result = { name, modality: cat ? cat.modality : '—', finding, phaseVisible: defined ? defined.phases.includes(state.phase) : true, critical: /occlusion|active|rupture|embol|elevat/i.test(finding) && !!defined };
+    // ——— Simulated PACS: deterministic DICOM identifiers for the study ———
+    result.pacs = pacsMetadata(order, cat, result);
+    return result;
   }
   // Lab values: scenario baseline + phase modifiers
   const labs = scenario.labs || {};
@@ -225,6 +232,36 @@ function buildResult(scenario, state, order) {
   if (phaseMod !== undefined) value = phaseMod;
   const criticalPatterns = /k\s*[>=]\s*6|glucose\s*[>=]?\s*(2[5-9]|3\d)|ph\s*7\.[01]|troponin\s*[>=]?\s*(5\d|[6-9]\d|\d{3})|platelets?\s*<\s*\d|h\s*b\s*<\s*80|inr\s*[>=]\s*4/i;
   return { name, category: cat ? cat.category : '—', unit: cat ? cat.unit : '', value: String(value), normal: false, critical: criticalPatterns.test(String(value)) };
+}
+
+// ——— Simulated PACS / DICOM identifiers ———
+// Deterministic pseudo-DICOM metadata: the same order always produces the
+// same UIDs and seeds so the client-side viewer renders stable images.
+const MODALITY_MAP = {
+  cxr: { modality: 'CR', bodyPart: 'CHEST' }, 'ct_head': { modality: 'CT', bodyPart: 'HEAD' },
+  'ct_abdo': { modality: 'CT', bodyPart: 'ABDOMEN' }, 'ct_pa': { modality: 'CT', bodyPart: 'CHEST' },
+  ecg: { modality: 'ECG', bodyPart: 'CHEST' }, us: { modality: 'US', bodyPart: 'ABDOMEN' },
+  us_abdo: { modality: 'US', bodyPart: 'ABDOMEN' }, echo: { modality: 'US', bodyPart: 'HEART' },
+  mri: { modality: 'MR', bodyPart: 'HEAD' }, axr: { modality: 'CR', bodyPart: 'ABDOMEN' },
+  'mammography': { modality: 'MG', bodyPart: 'BREAST' }, 'nuclear_medicine': { modality: 'NM', bodyPart: 'WHOLEBODY' }
+};
+function pacsMetadata(order, cat, result) {
+  const m = MODALITY_MAP[order.item_key] || { modality: (cat && cat.modality || 'OT').toUpperCase().slice(0, 2), bodyPart: 'UNKNOWN' };
+  const seed = order.run_id * 7919 + order.id * 104729;
+  const uidRoot = '1.2.826.0.1.3680043.10.1905'; // Medic1905 simulated root
+  return {
+    accessionNumber: 'M1905-' + String(100000 + seed % 900000),
+    studyInstanceUID: `${uidRoot}.${seed}.1`,
+    seriesInstanceUID: `${uidRoot}.${seed}.2`,
+    patientID: 'M1905-SIM-' + String(order.run_id).padStart(5, '0'),
+    modality: m.modality,
+    bodyPart: m.bodyPart,
+    studyDescription: result.name,
+    seriesDescription: `${m.modality} ${m.bodyPart}`,
+    seed,
+    instanceCount: 1,
+    simulated: true // never confuse with real clinical imaging
+  };
 }
 
 // ——— Prescriptions with pharmacy safety engine ———
@@ -362,6 +399,134 @@ router.post('/runs/:id/end', (req, res) => {
     .run(JSON.stringify(score), ctx.run.id);
   db.prepare('INSERT INTO audit_log (user_id, action, target) VALUES (?,?,?)').run(req.user.id, 'run_complete', ctx.run.id);
   res.json({ score });
+});
+
+// ——— Surgical theatre simulation ———
+// Deterministic workflow: preop assessment → consent → WHO checklist →
+// procedure steps (validated order) → operative report. All clinical
+// facts come from the case's theatre block; nothing is AI-invented.
+router.post('/runs/:id/theatre', (req, res) => {
+  const ctx = loadRun(req.params.id);
+  if (!ctx) return res.status(404).json({ error: 'Run not found' });
+  if (!ctx.scenario.theatre) return res.status(400).json({ error: 'This case has no surgical theatre component' });
+  const state = JSON.parse(ctx.run.state);
+  if (!state.theatre) state.theatre = theatreEngine.createTheatre(ctx.scenario);
+  const theatre = state.theatre;
+  const block = ctx.scenario.theatre;
+  const { action, data } = req.body || {};
+  let response = { ok: true };
+
+  switch (action) {
+    case 'preop': {
+      if (theatre.stage !== 'preop') return res.status(400).json({ error: 'Preoperative assessment already completed' });
+      theatre.preop = data || null;
+      const s = theatreEngine.scorePreop(block, theatre.preop);
+      theatre.stage = 'consent';
+      addEvent(ctx.run, state, 'theatre_preop', { score: s.score, asa: (data || {}).asaClass || null });
+      response = { ok: s.ok, score: s.score, feedback: s.feedback };
+      break;
+    }
+    case 'consent': {
+      if (theatre.stage !== 'consent') return res.status(400).json({ error: 'Consent already completed' });
+      theatre.consent = data || null;
+      const s = theatreEngine.scoreConsent(block, theatre.consent);
+      theatre.stage = 'signin';
+      addEvent(ctx.run, state, 'theatre_consent', { score: s.score });
+      response = { ok: s.ok, score: s.score, feedback: s.feedback };
+      break;
+    }
+    case 'team': {
+      theatre.team = { ...theatre.team, ...(data || {}) };
+      addEvent(ctx.run, state, 'theatre_team', data || {});
+      break;
+    }
+    case 'signin': {
+      if (!theatre.signIn) {
+        theatre.signIn = data || {};
+        const s = theatreEngine.scoreChecklist('signIn', theatre.signIn);
+        addEvent(ctx.run, state, 'theatre_signin', { score: s.score });
+        response = { ok: s.ok, score: s.score, feedback: s.feedback };
+      }
+      break;
+    }
+    case 'timeout': {
+      if (!theatre.timeOut) {
+        theatre.timeOut = data || {};
+        const s = theatreEngine.scoreChecklist('timeOut', theatre.timeOut);
+        addEvent(ctx.run, state, 'theatre_timeout', { score: s.score });
+        response = { ok: s.ok, score: s.score, feedback: s.feedback };
+      }
+      break;
+    }
+    case 'signout': {
+      if (!theatre.signOut) {
+        theatre.signOut = data || {};
+        const s = theatreEngine.scoreChecklist('signOut', theatre.signOut);
+        addEvent(ctx.run, state, 'theatre_signout', { score: s.score });
+        response = { ok: s.ok, score: s.score, feedback: s.feedback };
+      }
+      break;
+    }
+    case 'step': {
+      const stepId = (data || {}).stepId;
+      const r = theatreEngine.applyStep(theatre, stepId);
+      addEvent(ctx.run, state, r.ok ? 'theatre_step' : 'theatre_step_failed', { stepId, error: r.error });
+      response = r;
+      if (r.complete) {
+        theatre.stage = theatre.signOut ? 'report' : 'signout';
+        addEvent(ctx.run, state, 'theatre_procedure_complete', { procedure: theatre.procedure });
+      }
+      break;
+    }
+    case 'report': {
+      theatre.report = data || null;
+      const s = theatreEngine.scoreReport(theatre, theatre.report);
+      theatre.stage = 'complete';
+      theatre.score = theatreEngine.scoreTheatre(theatre, block);
+      // Credit surgical management items in the main physiology engine
+      const procWords = theatre.procedure.toLowerCase().split(/\W+/).filter(w => w.length > 4);
+      for (const m of ctx.scenario.management) {
+        if (state.completedManagement[m.id]) continue;
+        const labelWords = m.label.toLowerCase().split(/\W+/).filter(w => w.length > 4);
+        if (procWords.some(w => labelWords.includes(w)) || labelWords.some(w => procWords.includes(w))) {
+          physiology.completeManagement(state, m.id, ctx.scenario);
+        }
+      }
+      addEvent(ctx.run, state, 'theatre_complete', { procedure: theatre.procedure, score: theatre.score.total });
+      response = { ok: s.ok, score: s.score, feedback: s.feedback, theatreScore: theatre.score };
+      break;
+    }
+    default:
+      return res.status(400).json({ error: 'Unknown theatre action' });
+  }
+  state.vitals = physiology.computeVitals(ctx.scenario, state, ctx.run.id);
+  persistState(ctx.run, state);
+  res.json({ ...response, stage: theatre.stage });
+});
+
+// ——— Simulated PACS: study list for the DICOM viewer ———
+router.get('/runs/:id/studies', (req, res) => {
+  const ctx = loadRun(req.params.id);
+  if (!ctx) return res.status(404).json({ error: 'Run not found' });
+  const orders = db.prepare(`SELECT * FROM orders WHERE run_id = ? AND kind = 'imaging' AND status = 'resulted' ORDER BY id`).all(ctx.run.id);
+  const studies = orders.map(o => {
+    const result = JSON.parse(o.result || '{}');
+    return {
+      orderId: o.id,
+      accessionNumber: result.pacs ? result.pacs.accessionNumber : null,
+      studyInstanceUID: result.pacs ? result.pacs.studyInstanceUID : null,
+      seriesInstanceUID: result.pacs ? result.pacs.seriesInstanceUID : null,
+      modality: result.pacs ? result.pacs.modality : 'OT',
+      bodyPart: result.pacs ? result.pacs.bodyPart : '—',
+      studyDescription: result.name,
+      seriesDescription: result.pacs ? result.pacs.seriesDescription : '—',
+      seed: result.pacs ? result.pacs.seed : 1,
+      finding: result.finding,
+      critical: !!result.critical,
+      simulated: true
+    };
+  });
+  res.json({ studies, pacsNode: 'MEDIC1905-PACS-SIM', simulated: true });
 });
 
 // ——— Instructor: live monitoring & overrides ———

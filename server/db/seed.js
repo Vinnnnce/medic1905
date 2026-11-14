@@ -6,6 +6,8 @@ const { DRUGS } = require('../data/drugs');
 const { LABS, IMAGING } = require('../data/catalog');
 const { CASES_PART1 } = require('../data/cases1');
 const { CASES_PART2 } = require('../data/cases2');
+const { CASES_PART3 } = require('../data/cases3');
+const { CASES_PART4 } = require('../data/cases4');
 const bcrypt = require('bcryptjs');
 
 function main() {
@@ -77,7 +79,7 @@ function main() {
   // ——— Cases ———
   const caseStmt = db.prepare(`INSERT INTO cases (key, title, specialty, difficulty, scenario_type, description, status, scenario)
     VALUES (?,?,?,?,?,?,?,?)`);
-  const allCases = [...CASES_PART1, ...CASES_PART2];
+  const allCases = [...CASES_PART1, ...CASES_PART2, ...CASES_PART3, ...CASES_PART4];
   for (const c of allCases) {
     caseStmt.run(c.key, c.title, c.specialty, c.difficulty, c.scenario_type, c.description, 'published', JSON.stringify(c.scenario));
   }

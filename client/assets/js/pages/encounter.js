@@ -19,7 +19,9 @@ function renderEncounter() {
   const completed = d.run.status === 'completed';
   const tabs = [
     ['consult', 'Consultation'], ['exam', 'Examination'], ['invest', 'Investigations'],
-    ['rx', 'Prescribing'], ['actions', 'Procedures'], ['nursing', 'Nursing & Notes'], ['debrief', completed ? 'Debrief & Report' : 'Finish & Debrief']
+    ['rx', 'Prescribing'], ['actions', 'Procedures'],
+    ...(d.hasTheatre ? [['theatre', 'Theatre']] : []),
+    ['nursing', 'Nursing & Notes'], ['debrief', completed ? 'Debrief & Report' : 'Finish & Debrief']
   ];
   return `
   <div class="grid" style="grid-template-columns:1fr 340px;gap:14px;align-items:start;" id="enc-main">
@@ -111,7 +113,17 @@ function eventLabel(e) {
     nursing_observation: () => 'Nursing observation recorded',
     management: () => '✓ ' + esc(e.label || e.id || ''),
     procedure: () => 'Performed: ' + esc(e.label || ''),
-    procedure_attempt: () => 'Attempted: ' + esc(e.label || '') + ' <span class="badge amber">not recognised</span>'
+    procedure_attempt: () => 'Attempted: ' + esc(e.label || '') + ' <span class="badge amber">not recognised</span>',
+    theatre_preop: () => 'Theatre: preoperative assessment recorded (ASA ' + (e.asa || '—') + ')',
+    theatre_consent: () => 'Theatre: consent discussion completed',
+    theatre_team: () => 'Theatre: team assigned',
+    theatre_signin: () => 'Theatre: WHO sign-in performed',
+    theatre_timeout: () => 'Theatre: WHO time-out performed before incision',
+    theatre_signout: () => 'Theatre: WHO sign-out performed',
+    theatre_step: () => 'Theatre step: ' + esc(String(e.stepId || '').replace(/_/g, ' ')),
+    theatre_step_failed: () => '<span style="color:var(--amber);">Theatre: ' + esc(String(e.stepId || '').replace(/_/g, ' ')) + ' — ' + esc(e.error || 'not performed correctly') + '</span>',
+    theatre_procedure_complete: () => '<b style="color:var(--green);">Theatre: ' + esc(e.procedure || 'procedure') + ' completed</b>',
+    theatre_complete: () => '<b>Theatre case complete — module score ' + (e.score != null ? (e.score.total != null ? e.score.total : e.score) + '%' : '—') + '</b>'
   };
   const fn = map[e.type];
   return fn ? fn() : esc(e.name || e.label || e.type);
@@ -122,7 +134,7 @@ function encTab(tab) {
   document.querySelectorAll('.tabs button').forEach(b => {
     b.classList.toggle('active', b.textContent.toLowerCase().includes(({
       consult: 'consultation', exam: 'examination', invest: 'investigations',
-      rx: 'prescribing', actions: 'procedures', nursing: 'nursing', debrief: 'debrief'
+      rx: 'prescribing', actions: 'procedures', theatre: 'theatre', nursing: 'nursing', debrief: 'debrief'
     })[tab] || tab));
   });
   const body = document.getElementById('enc-body');
@@ -140,6 +152,7 @@ function encBodyHtml() {
     case 'invest': return investHtml(d);
     case 'rx': return rxHtml(d);
     case 'actions': return actionsHtml(d);
+    case 'theatre': return theatreHtml(d);
     case 'nursing': return nursingHtml(d);
     case 'debrief': return debriefHtml(d);
   }
@@ -247,7 +260,9 @@ function ordersHtml(orders) {
 function resultHtml(o) {
   const r = o.result;
   if (!r) return '';
-  if (r.modality) return `<div style="font-size:13px;margin-top:4px;" class="${r.critical ? 'result-crit' : ''}"><b>${esc(r.modality)} report:</b> ${esc(r.finding)}</div>`;
+  if (r.modality) return `
+    <div style="font-size:13px;margin-top:4px;" class="${r.critical ? 'result-crit' : ''}"><b>${esc(r.modality)} report:</b> ${esc(r.finding)}</div>
+    ${r.pacs ? `<button class="btn secondary" style="font-size:12px;padding:4px 12px;margin-top:6px;" onclick="openDicomViewer(${o.id})">Open in PACS viewer</button>` : ''}`;
   return `<div style="font-size:13px;margin-top:4px;" class="${r.critical ? 'result-crit' : ''}">
     <b>${esc(r.name)}:</b> ${esc(r.value)}${r.unit ? ' ' + esc(r.unit) : ''} ${r.normal ? '<span class="badge green">normal</span>' : (r.critical ? '<span class="badge red">CRITICAL</span>' : '')}
     ${r.category ? `<span class="muted" style="font-size:11px;">(${esc(r.category)}, ref: see catalog)</span>` : ''}</div>`;
@@ -386,6 +401,223 @@ async function submitDx() {
   if (!dx) return alert('Enter your working diagnosis first.');
   await doAction('diagnosis', dx);
   alert('Diagnosis recorded: ' + dx + '\nIt will be assessed in the debrief.');
+}
+
+// ——— Surgical theatre simulation ———
+const THEATRE_CHECKLISTS = {
+  signIn: [
+    ['patient_identity', 'Patient identity confirmed (name, DOB, wristband)'],
+    ['site', 'Surgical site marked and visible'],
+    ['procedure', 'Procedure confirmed aloud with the whole team'],
+    ['allergies', 'Allergies declared to the anaesthetist'],
+    ['airway_risk', 'Airway difficulty and aspiration risk assessed'],
+    ['blood_loss', 'Anticipated blood loss and blood availability discussed']
+  ],
+  timeOut: [
+    ['introduce_team', 'All team members introduced by name and role'],
+    ['patient_confirm', 'Surgeon, anaesthetist and nurse verbally confirm patient, site and procedure'],
+    ['site_marking', 'Site marking checked — decision to incise confirmed'],
+    ['imaging', 'Relevant imaging displayed in theatre'],
+    ['critical_events', 'Critical steps, operative duration and anticipated problems reviewed'],
+    ['antibiotic_timing', 'Antibiotic prophylaxis given within the last 60 minutes']
+  ],
+  signOut: [
+    ['procedure_recorded', 'Procedure recorded in the operative notes'],
+    ['instrument_count', 'Instrument, needle and swab counts declared correct'],
+    ['specimen_labelled', 'Specimen labelled and read aloud, including patient name'],
+    ['key_concerns', 'Key concerns for recovery identified for the team']
+  ]
+};
+
+function theatreHtml(d) {
+  const t = d.theatre;
+  if (!t) return '<div class="empty">Theatre module unavailable for this case.</div>';
+  const stageOrder = ['preop', 'consent', 'signin', 'timeout', 'procedure', 'signout', 'report', 'complete'];
+  const stageIdx = stageOrder.indexOf(t.stage);
+  const stepsDone = (t.steps || []).filter(s => s.done).length;
+  return `
+  <div class="card card-pad mb">
+    <h2>Surgical theatre — ${esc(t.procedure)}</h2>
+    <div class="sub">Anaesthesia: <b>${esc(t.anaesthesia)}</b> · Expected ASA grade: <b>${esc(t.asaText || t.asa)}</b> · Steps completed: <b>${stepsDone}/${t.steps.length}</b></div>
+    <div style="display:flex;gap:4px;margin-top:10px;flex-wrap:wrap;">
+      ${stageOrder.map((s, i) => `<div title="${s}" style="flex:1;min-width:60px;height:6px;border-radius:3px;background:${i <= stageIdx ? 'var(--teal)' : 'var(--line)'};"></div>`).join('')}
+    </div>
+    <div class="sub" style="margin-top:4px;">Stage: <b>${esc(t.stage)}</b> — the WHO Surgical Safety Checklist structures this workflow. Skipping steps is scored.</div>
+  </div>
+
+  <div class="grid cols-2">
+    ${theatreSection('1. Preoperative assessment', t.preop !== null, `
+      <div class="field"><label>ASA physical status</label>
+        <select id="t-asa"><option value="">— select —</option>${['I — healthy', 'II — mild systemic disease', 'III — severe systemic disease', 'IV — life-threatening disease', 'V — moribund'].map((o, i) => `<option value="${i + 1}">${o}</option>`).join('')}</select></div>
+      <div class="field"><label>Airway assessment</label>
+        <select id="t-airway"><option value="">— select —</option><option>Mallampati I — full view</option><option>Mallampati II — soft palate</option><option>Mallampati III — base of uvula</option><option>Mallampati IV — hard palate only</option></select></div>
+      <div class="field"><label>Fasting status</label>
+        <select id="t-fasting"><option value="">— select —</option><option>Fasted >6 hours (clear fluids >2h)</option><option>Not fasted — surgery must be delayed or RSI technique</option><option>Unknown — must clarify before induction</option></select></div>
+      <div class="field"><label>Comorbidities & fitness review</label><textarea id="t-comorb" rows="2" placeholder="Cardiac, respiratory, exercise tolerance, previous anaesthetic problems…"></textarea></div>
+      <label style="display:flex;gap:8px;align-items:center;font-size:13px;"><input type="checkbox" id="t-allergy"> Allergies confirmed with the patient (and checked against the chart)</label>
+      <button class="btn mt" onclick="theatrePreop()">Complete preoperative assessment</button>`)}
+    ${theatreSection('2. Consent simulation', t.consent !== null, `
+      <div class="sub">Discuss with the patient. The three <span class="badge red">must-discuss</span> risks are specific to this procedure.</div>
+      <div class="field"><label>Risks discussed with the patient (tick each one you covered)</label>
+        ${(t.risks || []).map((r, i) => `<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:3px 0;"><input type="checkbox" class="t-risk" value="${esc(r)}"> ${esc(r)}${i < 3 ? ' <span class="badge red">must discuss</span>' : ''}</label>`).join('')}</div>
+      <div class="field"><label>Alternatives discussed (including non-operative management)</label><textarea id="t-alt" rows="2" placeholder="What else could be offered — conservative management, other procedures, doing nothing…"></textarea></div>
+      <div class="field"><label>Patient / representative signature (type name)</label><input id="t-patient" placeholder="Patient name"></div>
+      <div class="field"><label>Clinician taking consent (type name & grade)</label><input id="t-clinician" placeholder="e.g. Dr Moreau, ST3 General Surgery"></div>
+      <button class="btn mt" onclick="theatreConsent()">Complete consent</button>`)}
+  </div>
+
+  <div class="grid cols-2 mt">
+    ${theatreSection('3. Team assignment', !!(t.team && t.team.surgeon && t.team.anaesthetist), `
+      <div class="row">
+        <div class="field"><label>Operating surgeon</label><input id="team-surgeon" placeholder="Name & grade"></div>
+        <div class="field"><label>Anaesthetist</label><input id="team-anaesthetist" placeholder="Name & grade"></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Scrub practitioner</label><input id="team-scrub" placeholder="Name"></div>
+        <div class="field"><label>Circulating practitioner</label><input id="team-circulating" placeholder="Name"></div>
+      </div>
+      <button class="btn" onclick="theatreTeam()">Assign theatre team</button>`)}
+    ${theatreSection('4. WHO Sign-In (before induction)', !!t.signIn, `
+      <div class="sub">Confirm each item aloud as a team before induction of anaesthesia.</div>
+      ${THEATRE_CHECKLISTS.signIn.map(([k, label]) => `<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:3px 0;"><input type="checkbox" class="t-signin" value="${k}"> ${label}</label>`).join('')}
+      <button class="btn mt" onclick="theatreChecklist('signin')">Complete sign-in</button>`)}
+  </div>
+
+  <div class="grid cols-2 mt">
+    ${theatreSection('5. WHO Time-Out (before incision)', !!t.timeOut, `
+      <div class="sub">The entire team stops before skin incision. ${t.timeOut ? 'Completed.' : 'Required before performing any procedure step.'}</div>
+      ${THEATRE_CHECKLISTS.timeOut.map(([k, label]) => `<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:3px 0;"><input type="checkbox" class="t-timeout" value="${k}"> ${label}</label>`).join('')}
+      <button class="btn mt" onclick="theatreChecklist('timeout')">Complete time-out</button>`)}
+    ${theatreSection('6. Procedure steps', stepsDone === t.steps.length && stepsDone > 0, `
+      <div class="sub">Perform steps in the correct order — the engine rejects out-of-sequence steps, as in real theatre.</div>
+      <div id="t-steps">${theatreStepsHtml(t)}</div>`)}
+  </div>
+
+  <div class="grid cols-2 mt">
+    ${theatreSection('7. WHO Sign-Out (before leaving theatre)', !!t.signOut, `
+      <div class="sub">Before the patient leaves the operating room.</div>
+      ${THEATRE_CHECKLISTS.signOut.map(([k, label]) => `<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;padding:3px 0;"><input type="checkbox" class="t-signout" value="${k}"> ${label}</label>`).join('')}
+      <button class="btn mt" onclick="theatreChecklist('signout')">Complete sign-out</button>`)}
+    ${theatreSection('8. Operative report', t.stage === 'complete', `
+      <div class="field"><label>Operative findings</label><textarea id="t-findings" rows="3" placeholder="What was found at operation…"></textarea></div>
+      <div class="field"><label>Procedure performed</label><input id="t-procdone" placeholder="e.g. laparoscopic adhesiolysis"></div>
+      <div class="field"><label>Complications (or state none)</label><input id="t-comps" placeholder="e.g. none / enterotomy repaired…"></div>
+      <div class="field"><label>Swab & instrument count</label>
+        <select id="t-swab"><option value="">— select —</option><option value="correct">Correct — counts declared complete</option><option value="mismatch">Mismatch — resolved before closure</option><option value="not_counted">Not performed</option></select></div>
+      <button class="btn" onclick="theatreReport()">Write operative report & close</button>`)}
+  </div>
+
+  ${t.stage === 'complete' && t.score ? theatreScoreHtml(t) : ''}`;
+}
+
+function theatreSection(title, done, inner) {
+  return `
+  <div class="card card-pad">
+    <h3 style="display:flex;justify-content:space-between;align-items:center;">${title} ${done ? '<span class="badge green">done</span>' : ''}</h3>
+    ${inner}
+  </div>`;
+}
+
+function theatreStepsHtml(t) {
+  return t.steps.map((s, i) => {
+    const isNext = !s.done && t.steps.slice(0, i).every(x => x.done);
+    const blocked = !t.timeOut && !s.done;
+    return `
+    <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line);">
+      <span class="badge ${s.done ? 'green' : blocked ? 'gray' : 'blue'}">${i + 1}</span>
+      <div style="flex:1;">
+        <b style="font-size:13.5px;">${esc(s.name)}</b>
+        <div class="muted" style="font-size:12px;">${esc(s.detail || '')}</div>
+      </div>
+      ${s.done ? '<span class="badge green">✓</span>' : `<button class="btn secondary" style="font-size:12px;padding:4px 12px;" ${blocked ? 'disabled title="Complete the WHO time-out first"' : ''} onclick="theatreStep('${esc(s.id)}')">Perform</button>`}
+    </div>`;
+  }).join('');
+}
+
+async function theatrePost(action, data) {
+  try {
+    const r = await api.post(`/runs/${ENC.runId}/theatre`, { action, data });
+    // refresh theatre state from server
+    const full = await api.get('/runs/' + ENC.runId);
+    ENC.data.theatre = full.theatre;
+    ENC.data.state = full.state;
+    encTab('theatre');
+    refreshSide();
+    return r;
+  } catch (e) { alert(e.message); return null; }
+}
+
+async function theatrePreop() {
+  const data = {
+    asaClass: +document.getElementById('t-asa').value || null,
+    airway: document.getElementById('t-airway').value || null,
+    fasting: document.getElementById('t-fasting').value || null,
+    comorbidities: document.getElementById('t-comorb').value.trim(),
+    allergiesConfirmed: document.getElementById('t-allergy').checked
+  };
+  const r = await theatrePost('preop', data);
+  if (r && !r.ok) alert('Preoperative assessment gaps:\n\n' + (r.feedback || []).join('\n'));
+}
+async function theatreConsent() {
+  const risks = [...document.querySelectorAll('.t-risk:checked')].map(x => x.value);
+  const data = {
+    discussedRisks: risks,
+    alternatives: document.getElementById('t-alt').value.trim(),
+    signatureName: document.getElementById('t-patient').value.trim(),
+    signatureRole: document.getElementById('t-clinician').value.trim()
+  };
+  const r = await theatrePost('consent', data);
+  if (r && !r.ok) alert('Consent quality issues:\n\n' + (r.feedback || []).join('\n'));
+}
+async function theatreTeam() {
+  await theatrePost('team', {
+    surgeon: document.getElementById('team-surgeon').value.trim(),
+    anaesthetist: document.getElementById('team-anaesthetist').value.trim(),
+    scrub: document.getElementById('team-scrub').value.trim(),
+    circulating: document.getElementById('team-circulating').value.trim()
+  });
+}
+async function theatreChecklist(kind) {
+  const cls = { signin: '.t-signin', timeout: '.t-timeout', signout: '.t-signout' }[kind];
+  const action = { signin: 'signin', timeout: 'timeout', signout: 'signout' }[kind];
+  const answers = {};
+  document.querySelectorAll(cls + ':checked').forEach(x => answers[x.value] = true);
+  const r = await theatrePost(action, answers);
+  if (r && r.feedback && r.feedback.length) alert('Checklist gaps:\n\n' + r.feedback.join('\n'));
+}
+async function theatreStep(stepId) {
+  const r = await theatrePost('step', { stepId });
+  if (r && !r.ok) alert(r.message || 'Step not performed.');
+}
+async function theatreReport() {
+  const data = {
+    findings: document.getElementById('t-findings').value.trim(),
+    procedureDone: document.getElementById('t-procdone').value.trim(),
+    complications: document.getElementById('t-comps').value.trim(),
+    swabCount: document.getElementById('t-swab').value || null
+  };
+  const r = await theatrePost('report', data);
+  if (r && r.theatreScore) {
+    alert('Theatre module complete — score ' + r.theatreScore.total + '%');
+  }
+}
+
+function theatreScoreHtml(t) {
+  const s = t.score;
+  const dims = [['preop', 'Preoperative assessment'], ['consent', 'Consent'], ['signIn', 'WHO sign-in'], ['timeOut', 'WHO time-out'], ['signOut', 'WHO sign-out'], ['report', 'Operative report']];
+  return `
+  <div class="card card-pad mt">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+      <div><h2>Theatre module assessment</h2><div class="sub">Deterministic scoring against the WHO Safe Surgery workflow and the case's expected pathway.</div></div>
+      <div class="score-big" style="color:${s.total >= 70 ? 'var(--green)' : s.total >= 50 ? 'var(--amber)' : 'var(--red)'};">${s.total}%</div>
+    </div>
+    ${dims.map(([k, label]) => `
+      <div style="margin:8px 0;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;"><b>${label}</b><span>${s.breakdown[k]}%</span></div>
+        <div class="bar"><div style="width:${s.breakdown[k]}%;background:${s.breakdown[k] >= 70 ? 'var(--green)' : s.breakdown[k] >= 40 ? 'var(--amber)' : 'var(--red)'};"></div></div>
+      </div>`).join('')}
+    ${s.feedback.length ? `<h3 class="mt">Feedback</h3><ul style="padding-left:18px;font-size:13px;">${s.feedback.map(f => `<li style="margin:4px 0;">${esc(f)}</li>`).join('')}</ul>` : '<div class="alert success mt">A flawless theatre pathway — every checklist item, consent element and report section completed.</div>'}
+  </div>`;
 }
 
 // ——— Nursing & notes ———
