@@ -46,7 +46,10 @@ function generatePixels(study) {
     const noPtx = /no pneumothorax|without pneumothorax|pneumothorax excluded/.test(f); // negation guard
     const ptxRight = !noPtx && ((/pneumothorax/.test(f) && /right/.test(f)) || /collapse of the right/.test(f));
     const ptxLeft = !noPtx && ((/pneumothorax/.test(f) && /left/.test(f) && !/right/.test(f)) || /collapse of the left/.test(f));
-    const hyper = /hyperinfl/.test(f) || /flattened diaphragm/.test(f); // hyperinflated lungs (e.g. bronchiolitis)
+    const hyper = /hyperinfl/.test(f) || /flattened diaphragm/.test(f); // hyperinflated lungs (e.g. bronchiolitis, COPD)
+    const consRight = /consolidat/.test(f) && /right/.test(f); // lobar pneumonia, right lower lobe
+    const consLeft = /consolidat/.test(f) && /left/.test(f) && !/right/.test(f); // lobar pneumonia, left lower lobe
+    const effusion = /effusion/.test(f) && !/no effusion|without effusion/.test(f); // basal pleural effusion
     const shift = ptxRight ? 1 : ptxLeft ? -1 : 0; // mediastinal shift direction (viewer x)
     const effPtx = ptxRight || ptxLeft; // air where a lung should be
     const noise2 = valueNoise(mulberry32((study.seed ^ 0x9E3779B9) >>> 0), 14); // pulmonary vasculature
@@ -100,6 +103,23 @@ function generatePixels(study) {
           }
           const ribZone = Math.max(lung * 0.85, onAirSide ? 0.6 : 0);
           v = mix(v, Math.max(v + 34, 96), ribT * ribZone);
+          // lobar consolidation (e.g. community-acquired pneumonia) — dense lower-zone opacity with air bronchograms
+          if (consRight || consLeft) {
+            const cons = ell(x, y, consRight ? 176 : 336, hyper ? 316 : 306, 76, 66, 0.10);
+            const fade = y > 252 ? 1 : Math.max(0, (y - 214) / 38); // lower lobe only
+            const br = noise2(nx + (consRight ? 0.34 : 0.12), ny * 0.9); // stay inside noise domain
+            const band = Math.abs(br - 0.5); // level-set curves of the noise read as branching airways
+            const bronch = band < 0.045 ? (0.045 - band) / 0.045 : 0; // air bronchogram streaks through the opacity
+            v = mix(v, 152 + noise(nx, ny) * 22 - bronch * 98, cons * fade);
+          }
+          // small pleural effusion — dense meniscus at the base, just above the diaphragm
+          if (effusion && !effPtx) {
+            const dY0 = domeY(x);
+            if (y < dY0 && y > dY0 - 26) {
+              const side = consRight ? Math.min(1, Math.max(0, (262 - x) / 26)) : consLeft ? Math.min(1, Math.max(0, (x - 250) / 26)) : 1;
+              v = mix(v, 170 + noise(nx, ny) * 16, Math.min(1, (dY0 - y) / 22) * 0.8 * side);
+            }
+          }
           // diaphragm + abdomen below the domes
           const dY = domeY(x);
           if (y > dY) v = mix(v, 112 + noise(nx, ny) * 20, Math.min(1, (y - dY) / 9));

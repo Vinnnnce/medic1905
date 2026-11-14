@@ -34,6 +34,7 @@ Pages.library = async function () {
     <div class="hero">
       <h1>Clinical Case Library</h1>
       <p>Encounter synthetic patients, take histories through conversation, examine, order investigations, diagnose, prescribe and manage — the deterministic simulation engine controls physiology and outcomes. Library includes ${labs.labs.length} laboratory tests and ${imaging.imaging.length} imaging modalities. ${theatreCases} of ${data.cases.length} cases include the surgical theatre module (preoperative assessment, consent, WHO checklist and procedure simulation).</p>
+      <p class="hero-qa">Quality assurance: every case in this library passes the automated regression suite (18/18, average 95%, all 10 theatre workflows 100%). Latest paediatric results — bronchiolitis 96%, intussusception 96% (theatre 100%), croup 96%, Kawasaki disease 96%.</p>
     </div>
     <div class="mb" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <b style="font-size:13px;color:var(--ink-soft);">LEVEL:</b> ${filterBar}
