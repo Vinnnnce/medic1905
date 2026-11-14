@@ -12,12 +12,14 @@ Pages.library = async function () {
   const filterBar = ['undergraduate', 'intern', 'resident', 'specialist'].map(d =>
     `<a href="#/library${d === diff ? '' : '?difficulty=' + d}" class="badge ${d === diff ? 'teal' : 'gray'}" style="font-size:13px;padding:6px 13px;">${diffLabels[d]}</a>`).join('');
 
+  const theatreCases = data.cases.filter(c => c.theatre).length;
   const cards = data.cases.map(c => `
     <div class="card card-pad" style="display:flex;flex-direction:column;">
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
         <span class="badge red">${esc(typeLabels[c.scenario_type] || c.scenario_type)}</span>
         <span class="badge blue">${esc(diffLabels[c.difficulty] || c.difficulty)}</span>
         <span class="badge teal">${esc(c.specialty)}</span>
+        ${c.theatre ? `<span class="badge amber" title="${esc(c.theatre.procedure)}">Theatre: ${esc(c.theatre.procedure.split(/[(:/]/)[0].trim())} · ${c.theatre.steps} steps</span>` : ''}
         ${c.status !== 'published' ? `<span class="badge gray">${esc(c.status)}</span>` : ''}
       </div>
       <h2>${esc(c.title)}</h2>
@@ -31,7 +33,7 @@ Pages.library = async function () {
   return App.shell(`
     <div class="hero">
       <h1>Clinical Case Library</h1>
-      <p>Encounter synthetic patients, take histories through conversation, examine, order investigations, diagnose, prescribe and manage — the deterministic simulation engine controls physiology and outcomes. Library includes ${labs.labs.length} laboratory tests and ${imaging.imaging.length} imaging modalities.</p>
+      <p>Encounter synthetic patients, take histories through conversation, examine, order investigations, diagnose, prescribe and manage — the deterministic simulation engine controls physiology and outcomes. Library includes ${labs.labs.length} laboratory tests and ${imaging.imaging.length} imaging modalities. ${theatreCases} of ${data.cases.length} cases include the surgical theatre module (preoperative assessment, consent, WHO checklist and procedure simulation).</p>
     </div>
     <div class="mb" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <b style="font-size:13px;color:var(--ink-soft);">LEVEL:</b> ${filterBar}

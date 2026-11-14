@@ -43,8 +43,10 @@ function generatePixels(study) {
     const ell = (px_, py_, ex, ey, rx, ry, edge) => Math.min(1, Math.max(0, (1 - Math.hypot((px_ - ex) / rx, (py_ - ey) / ry)) / edge));
     // chest-specific setup (loop-invariant — computed ONCE per study)
     const f = (study.finding || '').toLowerCase();
-    const ptxRight = (/pneumothorax/.test(f) && /right/.test(f)) || /collapse of the right/.test(f);
-    const ptxLeft = (/pneumothorax/.test(f) && /left/.test(f) && !/right/.test(f)) || /collapse of the left/.test(f);
+    const noPtx = /no pneumothorax|without pneumothorax|pneumothorax excluded/.test(f); // negation guard
+    const ptxRight = !noPtx && ((/pneumothorax/.test(f) && /right/.test(f)) || /collapse of the right/.test(f));
+    const ptxLeft = !noPtx && ((/pneumothorax/.test(f) && /left/.test(f) && !/right/.test(f)) || /collapse of the left/.test(f));
+    const hyper = /hyperinfl/.test(f) || /flattened diaphragm/.test(f); // hyperinflated lungs (e.g. bronchiolitis)
     const shift = ptxRight ? 1 : ptxLeft ? -1 : 0; // mediastinal shift direction (viewer x)
     const effPtx = ptxRight || ptxLeft; // air where a lung should be
     const noise2 = valueNoise(mulberry32((study.seed ^ 0x9E3779B9) >>> 0), 14); // pulmonary vasculature
@@ -54,10 +56,10 @@ function generatePixels(study) {
       const t = L ? Math.min(1, Math.max(0, ((x_ - x0) * dx + (y_ - y0) * dy) / L)) : 0;
       return Math.hypot(x_ - (x0 + t * dx), y_ - (y0 + t * dy));
     };
-    // diaphragm domes (flattened under a tension pneumothorax)
+    // diaphragm domes (flattened under a tension pneumothorax or in hyperinflation)
     const domeY = x_ => {
-      const dl = 372 - (ptxRight ? 14 : 46) * Math.exp(-((x_ - 176) ** 2) / 9000);
-      const dr = 372 - (ptxLeft ? 14 : 42) * Math.exp(-((x_ - 336) ** 2) / 9000);
+      const dl = 372 - (ptxRight ? 14 : hyper ? 16 : 46) * Math.exp(-((x_ - 176) ** 2) / 9000);
+      const dr = 372 - (ptxLeft ? 14 : hyper ? 14 : 42) * Math.exp(-((x_ - 336) ** 2) / 9000);
       return Math.min(dl, dr);
     };
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
@@ -71,9 +73,9 @@ function generatePixels(study) {
       if (torso > 0) {
         v = mix(v, 85 + noise(nx, ny) * 22, torso);
         if (body === 'CHEST') {
-          // lung fields
-          const lungL = ell(x, y, 176, 228, 94, 130, 0.09);
-          const lungR = ell(x, y, 336, 228, 94, 130, 0.09);
+          // lung fields (taller and darker in hyperinflation)
+          const lungL = ell(x, y, 176, 228, 94, hyper ? 150 : 130, 0.09);
+          const lungR = ell(x, y, 336, 228, 94, hyper ? 150 : 130, 0.09);
           const lung = Math.max(lungL, lungR);
           const onAirSide = (ptxRight && lungL > 0.25) || (ptxLeft && lungR > 0.25);
           let lungVal;
@@ -81,8 +83,8 @@ function generatePixels(study) {
             lungVal = 22 + noise(nx, ny) * 5; // avascular air, fully collapsed hemithorax
           } else {
             const vessels = Math.pow(noise2(nx * 2.4, ny * 1.7), 2.6); // sparse bright branching
-            const hila = ell(x, y, ptxLeft ? 210 : 302, 232, 70, 90, 0.2); // more markings centrally
-            lungVal = 44 + vessels * (30 + 34 * hila) + noise(nx, ny) * 10;
+            const hila = ell(x, y, ptxLeft ? 210 : 302, 232, 70, hyper ? 110 : 90, 0.2); // more markings centrally (perihilar in bronchiolitis)
+            lungVal = (hyper ? 36 : 44) + vessels * (30 + 34 * hila * (hyper ? 1.7 : 1)) + noise(nx, ny) * 10;
           }
           v = mix(v, lungVal, lung);
           if (effPtx) { // dense collapsed lung stump near the hilum — sharp visceral pleural edge

@@ -46,6 +46,7 @@ function caseForLearner(row) {
     patient: { name: s.patient.name, age: s.patient.age, sex: s.patient.sex },
     presentation: s.presentation,
     examSystems: Object.keys(s.exam.systems || {}),
+    theatre: s.theatre ? { procedure: s.theatre.procedure, anaesthesia: s.theatre.anaesthesia, steps: s.theatre.steps.length } : null,
     labCatalogAvailable: true
   };
 }
