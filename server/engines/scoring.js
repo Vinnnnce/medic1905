@@ -30,13 +30,14 @@ function scoreRun(scenario, state, run) {
     detail: `${examDone}/${systemsAvailable} systems examined` });
 
   // ——— Investigations: expected vs ordered ———
-  const expectedOrders = (scenario.management || []).filter(m => (m.type === 'lab' || m.type === 'imaging' || m.label.toLowerCase().includes('test'))).map(m => m.label);
-  const orderedKeys = (run.orders || []).map(o => o.item_key || o.item || o);
-  const labKeys = orderedKeys.filter(k => /lab|hcg|potassium|bloods|cultures/i.test(k)).length;
-  const imgKeys = orderedKeys.filter(k => /ecg|imaging|ultrasound|ct|x-ray|cxr|endoscopy|scan/i.test(k)).length;
-  const invRatio = expectedOrders.length ? Math.min(1, (labKeys + imgKeys) / expectedOrders.length) : 1;
+  // An expected investigation counts as ordered when its management entry was
+  // credited by the engine (matched by item key, or any order of that kind for
+  // item-less expectations like "bloods").
+  const expectedInv = (scenario.management || []).filter(m => m.type === 'lab' || m.type === 'imaging' || m.label.toLowerCase().includes('test'));
+  const creditedInv = expectedInv.filter(m => (state.completedManagement || {})[m.id]).length;
+  const invRatio = expectedInv.length ? Math.min(1, creditedInv / expectedInv.length) : 1;
   dims.push({ dimension: 'Investigation selection', score: Math.round(rubric.investigations.points * invRatio), max: rubric.investigations.points,
-    detail: `${expectedOrders.length} expected investigations, ${labKeys + imgKeys} appropriate ordered` });
+    detail: `${expectedInv.length} expected investigations, ${creditedInv} appropriate ordered` });
 
   // ——— Diagnosis ———
   const submitted = (run.finalDiagnosis || '').toLowerCase();

@@ -250,6 +250,40 @@ const CASES_PART1 = [
         'Perforation risk rises sharply after 36 hours of symptoms — time is bowel.'
       ],
       references: ['WSES Jerusalem guidelines for diagnosis and treatment of acute appendicitis', 'NICE guideline NG80 — suspected appendicitis']
+    },
+    theatre: {
+      procedure: 'Laparoscopic appendicectomy',
+      anaesthesia: 'General anaesthesia with muscle relaxation; paracetamol + TAP block for postoperative analgesia',
+      asa: 'ASA I (healthy 22-year-old)',
+      risks: [
+        'Bleeding',
+        'Surgical site infection',
+        'Stump leak with pelvic abscess',
+        'Conversion to open appendicectomy (if appendix not accessible or perforation)',
+        'Injury to bowel, bladder or iliac vessels during port insertion',
+        'Port-site hernia',
+        'Venous thromboembolism',
+        'General anaesthetic risks',
+        'Rarely, removal of a normal appendix (negative appendicectomy)'
+      ],
+      steps: [
+        'WHO sign-in: identity, site, procedure, allergies, airway risk, blood loss plan',
+        'Consent verified — including conversion to open and negative appendicectomy risk',
+        'Prophylactic antibiotics given within 60 minutes of incision',
+        'Time-out: team introductions, site marking, imaging displayed',
+        'Induction of anaesthesia, stomach decompressed via NG if needed',
+        'Pneumoperitoneum and primary port insertion (Hasson open technique reduces vascular injury)',
+        'Secondary ports under direct vision',
+        'Patient positioned head-down, left-tilt (appendix falls toward pelvis)',
+        'Appendix identified and elevated',
+        'Mesoappendix divided with sealant device or clips, controlling the appendicular artery',
+        'Appendix base ligated with endoloop to the caecum',
+        'Specimen removed in a retrieval bag',
+        'If perforated: peritoneal lavage and suction of purulent fluid',
+        'Ports removed under vision, abdomen deflated',
+        'Port sites closed with local anaesthetic infiltration',
+        'WHO sign-out: swab and instrument counts, specimen labelled, concerns for recovery'
+      ]
     }
   }
 },

@@ -235,6 +235,36 @@ const CASES_PART2 = [
         'The cure is delivery, but timing balances maternal risk against fetal maturity — 34+2 with severe features means delivery after stabilisation.'
       ],
       references: ['NICE guideline NG133 — hypertension in pregnancy', 'FIGO good practice recommendations on pre-eclampsia']
+    },
+    theatre: {
+      procedure: 'Lower segment caesarean section (category 2 — pre-eclampsia with severe features at 34 weeks)',
+      anaesthesia: 'Spinal anaesthesia preferred (phenylephrine support for hypotension); general anaesthesia with RSI if platelets <70, coagulopathy or emergency',
+      asa: 'ASA III (pre-eclampsia with severe features — 34 weeks pregnant)',
+      risks: [
+        'Haemorrhage — uterine atony is the dominant risk in pre-eclampsia',
+        'Thromboembolism (pre-eclampsia is prothrombotic)',
+        'Anaesthetic risks — hypertensive response to laryngoscopy, high spinal block',
+        'Infection',
+        'Bladder or bowel injury',
+        'Hysterectomy in refractory atony (rare)',
+        'Neonatal respiratory distress syndrome — 34 weeks gestation',
+        'Magnesium toxicity if renal function declines'
+      ],
+      steps: [
+        'WHO sign-in: maternal identity, confirmed as left lateral tilt, allergies, airway, magnesium infusion running',
+        'Paediatric team present with resuscitaire and warmed environment for 34-week neonate',
+        'Time-out: team introductions, fetal heart confirmed, magnesium and antihypertensives reviewed',
+        'Spinal anaesthesia sited (or RSI general anaesthesia if coagulopathic)',
+        'Blood pressure supported with phenylephrine — avoid precipitate hypotension',
+        'Lower segment transverse incision',
+        'Uterine incision and delivery of the baby',
+        'Cord bloods taken; neonatal team assess and transfer to resuscitaire',
+        'Oxytocin infusion commenced (bolus then infusion — atony prophylaxis)',
+        'Placenta delivered and inspected',
+        'Uterine tone checked; balloon tamponade and senior help if atony develops',
+        'Uterine and fascial layers closed',
+        'WHO sign-out: counts correct, blood loss estimated, magnesium plan continued, HDU bed confirmed'
+      ]
     }
   }
 },
@@ -475,6 +505,36 @@ const CASES_PART2 = [
         'Restarting anticoagulation after a bleed: balance thrombotic vs bleeding risk — usually resume after haemostasis, often switching to a DOAC.'
       ],
       references: ['ESGE guideline: nonvariceal upper gastrointestinal haemorrhage', 'TRICC trial — restrictive transfusion strategies']
+    },
+    theatre: {
+      procedure: 'Emergency upper GI endoscopy (OGD) with haemostasis — adrenaline injection plus thermal coagulation',
+      anaesthesia: 'Conscious sedation (midazolam ± fentanyl) if stable and cooperative; general anaesthesia with airway protection if unstable or massive haemorrhage (aspiration risk)',
+      asa: 'ASA III (age 66, anticoagulated, acutely anaemic)',
+      risks: [
+        'Aspiration of blood during the procedure',
+        'Perforation of the oesophagus, stomach or duodenum',
+        'Failed haemostasis requiring surgery or radiological embolisation',
+        'Rebleeding after apparent haemostasis',
+        'Reaction to sedation — respiratory depression in an older patient',
+        'The bleeding lesion may not be found at endoscopy',
+        'Oesophageal intubation or dental damage during scope insertion'
+      ],
+      steps: [
+        'WHO sign-in: identity, allergies (sedation), airway risk, resuscitation status confirmed',
+        'Time-out: team introductions, endoscopy checklist, suction and intubation equipment ready',
+        'Sedation titrated carefully — older patients are sensitive',
+        'Scope passed under direct vision into the oesophagus',
+        'Stomach inspected — blood clot aspirated, pool suctioned to reveal the mucosa',
+        'Duodenum inspected to the second part (D2)',
+        'Bleeding point identified — visible vessel with adherent clot at the ulcer base',
+        'Adrenaline injected in four quadrants around the bleeding point',
+        'Thermal coagulation (heater probe or bipolar) applied to the vessel',
+        'Haemostasis tested — washing the site to confirm no rebleeding',
+        'Oesophagus re-inspected for varices or Mallory-Weiss tear',
+        'Biopsies taken for Helicobacter pylori testing',
+        'Scope withdrawn; procedure documented with Forrest classification',
+        'WHO sign-out: specimen labelled, sedation reversal plan, monitoring for rebleeding, restart-anticoagulation timing planned'
+      ]
     }
   }
 }

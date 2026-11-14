@@ -178,8 +178,8 @@ router.post('/runs/:id/orders', (req, res) => {
       new Date().toISOString(), new Date(Date.now() + processingMs).toISOString())
     .lastInsertRowid;
 
-  // management credit for expected orders
-  const mgmts = ctx.scenario.management.filter(m => (m.type === 'lab' || m.type === 'imaging') && (m.item === cat.key || (m.type === 'imaging' && !m.item)));
+  // management credit for expected orders (item-less expectations match any order of the same kind)
+  const mgmts = ctx.scenario.management.filter(m => (m.type === 'lab' || m.type === 'imaging') && (m.item === cat.key || (!m.item && m.type === kind)));
   if (mgmts.length) physiology.completeManagement(state, mgmts[0].id, ctx.scenario);
   addEvent(ctx.run, state, 'order', { kind, item: cat.name, urgent: !!urgent, justification: justification || null });
   state.vitals = physiology.computeVitals(ctx.scenario, state, ctx.run.id);
@@ -483,11 +483,12 @@ router.post('/runs/:id/theatre', (req, res) => {
       const s = theatreEngine.scoreReport(theatre, theatre.report);
       theatre.stage = 'complete';
       theatre.score = theatreEngine.scoreTheatre(theatre, block);
-      // Credit surgical management items in the main physiology engine
-      const procWords = theatre.procedure.toLowerCase().split(/\W+/).filter(w => w.length > 4);
+      // Credit surgical/procedural management items in the main physiology engine
+      const procWords = theatre.procedure.toLowerCase().split(/\W+/).filter(w => w.length > 5);
       for (const m of ctx.scenario.management) {
         if (state.completedManagement[m.id]) continue;
-        const labelWords = m.label.toLowerCase().split(/\W+/).filter(w => w.length > 4);
+        if (m.type !== 'procedure') continue; // only hands-on procedural work is credited by theatre completion
+        const labelWords = m.label.toLowerCase().split(/\W+/).filter(w => w.length > 5);
         if (procWords.some(w => labelWords.includes(w)) || labelWords.some(w => procWords.includes(w))) {
           physiology.completeManagement(state, m.id, ctx.scenario);
         }

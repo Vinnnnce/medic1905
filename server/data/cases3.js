@@ -359,6 +359,36 @@ const CASES_PART3 = [
         'After decompression, always place a chest drain: the cannula kinks and the pneumothorax re-tensions.'
       ],
       references: ['ATLS 10th edition — thoracic trauma', 'RCEM guidance on needle thoracostomy']
+    },
+    theatre: {
+      procedure: 'Intercostal chest drain insertion — left 5th intercostal space, anterior axillary line (Seldinger technique)',
+      anaesthesia: 'Procedural sedation (ketamine or midazolam ± fentanyl) with generous local anaesthetic infiltration — never insert a chest drain without analgesia',
+      asa: 'ASA II (healthy 24-year-old, multiply injured)',
+      risks: [
+        'Lung laceration by trocar or guidewire',
+        'Bleeding from intercostal vessels (neurovascular bundle runs along the LOWER border of each rib)',
+        'Subdiaphragmatic placement — drain in the liver or spleen',
+        'Surgical emphysema',
+        'Infection of the drain site or empyema',
+        'Drain dislodgement or kinking',
+        'Damage to the long thoracic nerve (winged scapula)'
+      ],
+      steps: [
+        'WHO sign-in: identity, allergies, airway, adequacy of decompression confirmed',
+        'Time-out: team introductions, side confirmed (LEFT) and marked, CXR/trauma imaging displayed',
+        'Procedural sedation commenced with continuous monitoring',
+        'Local anaesthetic infiltrated generously at the 5th ICS anterior axillary line',
+        'Incision made parallel to the rib, just ABOVE the lower rib of the interspace',
+        'Blunt dissection with forceps down to the pleura — never plunge',
+        'Pleura opened with the forceps tip; hiss of air confirms position',
+        'Finger sweep to clear the tract and confirm no adhesions',
+        'Guidewire advanced over the needle (Seldinger) or drain placed over the tract',
+        'Drain directed toward the apex and secured with sutures',
+        'Drain connected to an underwater seal at 20cm suction',
+        'Swing and bubbles confirmed — the drain is working',
+        'Chest X-ray to confirm position and re-expansion',
+        'WHO sign-out: drain documented, imaging saved, analgesia plan, trauma ICU bed confirmed'
+      ]
     }
   }
 },

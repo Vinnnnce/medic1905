@@ -41,6 +41,25 @@ function generatePixels(study) {
   if (mod === 'CR') { // radiograph: dark film, bright bone
     const mix = (a, b, t) => a * (1 - t) + b * t;
     const ell = (px_, py_, ex, ey, rx, ry, edge) => Math.min(1, Math.max(0, (1 - Math.hypot((px_ - ex) / rx, (py_ - ey) / ry)) / edge));
+    // chest-specific setup (loop-invariant — computed ONCE per study)
+    const f = (study.finding || '').toLowerCase();
+    const ptxRight = (/pneumothorax/.test(f) && /right/.test(f)) || /collapse of the right/.test(f);
+    const ptxLeft = (/pneumothorax/.test(f) && /left/.test(f) && !/right/.test(f)) || /collapse of the left/.test(f);
+    const shift = ptxRight ? 1 : ptxLeft ? -1 : 0; // mediastinal shift direction (viewer x)
+    const effPtx = ptxRight || ptxLeft; // air where a lung should be
+    const noise2 = valueNoise(mulberry32((study.seed ^ 0x9E3779B9) >>> 0), 14); // pulmonary vasculature
+    const ss = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+    const segDist = (x_, y_, x0, y0, x1, y1) => {
+      const dx = x1 - x0, dy = y1 - y0, L = dx * dx + dy * dy;
+      const t = L ? Math.min(1, Math.max(0, ((x_ - x0) * dx + (y_ - y0) * dy) / L)) : 0;
+      return Math.hypot(x_ - (x0 + t * dx), y_ - (y0 + t * dy));
+    };
+    // diaphragm domes (flattened under a tension pneumothorax)
+    const domeY = x_ => {
+      const dl = 372 - (ptxRight ? 14 : 46) * Math.exp(-((x_ - 176) ** 2) / 9000);
+      const dr = 372 - (ptxLeft ? 14 : 42) * Math.exp(-((x_ - 336) ** 2) / 9000);
+      return Math.min(dl, dr);
+    };
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
       const nx = x / S, ny = y / S;
       let v = 14 + noise(nx, ny) * 14;
@@ -52,18 +71,52 @@ function generatePixels(study) {
       if (torso > 0) {
         v = mix(v, 85 + noise(nx, ny) * 22, torso);
         if (body === 'CHEST') {
-          // lung fields (dark air) as soft ellipses
-          const lung = Math.max(ell(x, y, S / 2 - 82, 205, 58, 95, 0.12), ell(x, y, S / 2 + 82, 205, 58, 95, 0.12));
-          v = mix(v, 42 + noise(nx, ny) * 14, lung);
-          // heart / mediastinum
-          const heart = ell(x, y, S / 2 + 8, 240, 52, 72, 0.15);
-          v = mix(v, 125 + noise(nx, ny) * 22, heart);
-          // spine
-          const spine = Math.min(1, Math.max(0, (10 - Math.abs(cx)) / 8));
-          v = mix(v, 168 + noise(nx, ny) * 25, spine);
-          // ribs (slanted, varying)
-          const ribPhase = Math.abs(((y - 80 + cx * 0.18) % 42) - 21);
-          if (ribPhase < 5 && Math.abs(cx) > 60) v = 148 + noise(nx, ny) * 20;
+          // lung fields
+          const lungL = ell(x, y, 176, 228, 94, 130, 0.09);
+          const lungR = ell(x, y, 336, 228, 94, 130, 0.09);
+          const lung = Math.max(lungL, lungR);
+          const onAirSide = (ptxRight && lungL > 0.25) || (ptxLeft && lungR > 0.25);
+          let lungVal;
+          if (onAirSide) {
+            lungVal = 22 + noise(nx, ny) * 5; // avascular air, fully collapsed hemithorax
+          } else {
+            const vessels = Math.pow(noise2(nx * 2.4, ny * 1.7), 2.6); // sparse bright branching
+            const hila = ell(x, y, ptxLeft ? 210 : 302, 232, 70, 90, 0.2); // more markings centrally
+            lungVal = 44 + vessels * (30 + 34 * hila) + noise(nx, ny) * 10;
+          }
+          v = mix(v, lungVal, lung);
+          if (effPtx) { // dense collapsed lung stump near the hilum — sharp visceral pleural edge
+            const stump = ell(x, y, ptxRight ? 216 : 296, 240, 36, 52, 0.045);
+            v = mix(v, 88 + noise(nx, ny) * 16, stump);
+          }
+          // posterior ribs — slanted arcs across BOTH hemithoraces (still visible over air)
+          const cxr = x - 256;
+          let ribT = 0;
+          for (let i = 0; i < 7; i++) {
+            const ry = 148 + i * 34 + 0.15 * cxr + 0.00032 * cxr * cxr;
+            ribT = Math.max(ribT, ss(4.5, 1, Math.abs(y - ry)));
+          }
+          const ribZone = Math.max(lung * 0.85, onAirSide ? 0.6 : 0);
+          v = mix(v, Math.max(v + 34, 96), ribT * ribZone);
+          // diaphragm + abdomen below the domes
+          const dY = domeY(x);
+          if (y > dY) v = mix(v, 112 + noise(nx, ny) * 20, Math.min(1, (y - dY) / 9));
+          // mediastinal column (shifted away from the pneumothorax)
+          const medi = ell(x, y, 256 + shift * 34, 240, 62, 118, 0.10);
+          v = mix(v, 128 + noise(nx, ny) * 20, medi);
+          // trachea air column (also shifted)
+          const trach = Math.min(1, Math.max(0, (11 - Math.abs(cxr - shift * 26)) / 7)) * Math.min(1, Math.max(0, Math.min(y - 128, 232 - y) / 8));
+          v = mix(v, 58 + noise(nx, ny) * 8, trach);
+          // cardiac silhouette within the mediastinum
+          const heart = ell(x, y, 268 + shift * 30, 284, 58, 74, 0.09);
+          v = mix(v, 138 + noise(nx, ny) * 24, heart);
+          // thoracic spine seen through the mediastinum
+          const spine = Math.min(1, Math.max(0, (12 - Math.abs(cxr)) / 9));
+          v = mix(v, 152 + noise(nx, ny) * 22, spine * Math.max(medi, heart) * 0.8);
+          // clavicles
+          const clavL = ss(7, 3, segDist(x, y, 148, 126, 258, 150));
+          const clavR = ss(7, 3, segDist(x, y, 364, 126, 254, 150));
+          v = mix(v, 158 + noise(nx, ny) * 18, Math.max(clavL, clavR));
         } else { // abdomen
           v = mix(v, 92 + noise(nx, ny) * 26, torso);
           for (const p of pockets) { // bowel gas pockets, soft-edged
