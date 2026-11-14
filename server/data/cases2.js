@@ -276,7 +276,7 @@ const CASES_PART2 = [
   specialty: 'general-medicine',
   difficulty: 'intern',
   scenario_type: 'emergency',
-  description: 'A 78-year-old retired teacher is sent to the ED by his GP with a 4-day cough, fever and new confusion. Sepsis physiology is already established.',
+  description: 'A 78-year-old retired teacher is sent to the ED by his GP with a 4-day cough, fever and new confusion. Sepsis physiology is already established. Order the chest X-ray and review the full radiology report — dense right lower lobe consolidation with air bronchograms — in the simulated PACS viewer.',
   scenario: {
     patient: { name: 'Hendrik Vosloo', age: 78, sex: 'M', occupation: 'Retired teacher', city: 'Westmere' },
     presentation: { setting: 'Emergency & Trauma Department', triage: 'category 2', initial: 'Hendrik is confused and trying to pull off his oxygen mask. His daughter: "He has not been right for two days — talking nonsense, not drinking. His GP sent us straight in."' },
