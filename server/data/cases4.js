@@ -216,6 +216,35 @@ const CASES_PART4 = [
         'In children over 3 years, consider a pathological lead point (lymphoma, Meckel diverticulum).'
       ],
       references: ['ESPES guidelines — intussusception in children', 'NICE guideline NG51 — gastrointestinal tract obstruction']
+    },
+    theatre: {
+      procedure: 'Laparotomy / laparoscopy: manual untwisting of the intussuscepted bowel, resection of non-viable segment with primary anastomosis if required',
+      anaesthesia: 'General anaesthesia with muscle relaxation; caudal or TAP block for postoperative analgesia; aggressive warming (forced-air blanket), age-adjusted fluid resuscitation continued intra-operatively',
+      asa: 'ASA III (18-month-old, dehydrated and shocked on arrival — resuscitated before induction)',
+      risks: [
+        'Bleeding',
+        'Surgical site infection',
+        'Bowel resection with primary anastomosis (or stoma if unstable)',
+        'Anastomotic leak',
+        'Injury to bowel or mesenteric vessels during untwisting',
+        'Hypothermia and fluid shifts in a small child',
+        'General anaesthetic risks in a shocked toddler',
+        'Need for paediatric intensive care post-operatively'
+      ],
+      steps: [
+        'WHO sign-in: identity confirmed with parent present and armbands checked, procedure, allergies, airway risk, blood loss plan',
+        'Consent verified with parent — including risk of bowel resection, stoma and possible conversion',
+        'Prophylactic antibiotics given within 60 minutes of incision',
+        'Time-out: team introductions, ultrasound displayed, peritonitis status confirmed',
+        'Induction of anaesthesia with rapid-sequence considerations; NG decompression; warming mattress and fluids running',
+        'Laparotomy (or laparoscopy) — deliver the intussuscepted ileocolic segment onto the wound',
+        'Manual untwisting — gentle retrograde pressure; assess bowel viability and mesenteric vessels',
+        'Resection of non-viable bowel with primary anastomosis (or stoma if the child is unstable)',
+        'Examine for a pathological lead point (Meckel diverticulum, lymphoma) and treat accordingly',
+        'Haemostasis, swab and instrument counts, wound closure',
+        'Sign-out: procedure recorded, counts correct, specimen labelled, key concerns for paediatric recovery',
+        'Extubation and transfer to paediatric recovery with full monitoring'
+      ]
     }
   }
 },

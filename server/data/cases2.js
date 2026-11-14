@@ -456,7 +456,7 @@ const CASES_PART2 = [
     management: [
       { id: 'abc_resus', type: 'procedure', label: 'ABC + large-bore IV access x2 + crossmatch', withinMin: 15, critical: true, points: 10 },
       { id: 'transfuse_criteria', type: 'procedure', label: 'Restrictive transfusion strategy — transfuse only if Hb <70 (or <80 with cardiac history)', withinMin: 60, points: 8 },
-      { id: 'reverse_anticoag', type: 'drug', drugs: ['potassium chloride'], label: 'Warfarin reversal decision (vitamin K + prothrombin complex concentrate — simulator: any reversal step logged)', withinMin: 45, critical: true, points: 10 },
+      { id: 'reverse_anticoag', type: 'procedure', label: 'Warfarin reversal decision (vitamin K + prothrombin complex concentrate — simulator: any reversal step logged)', withinMin: 45, critical: true, points: 10 },
       { id: 'ppi', type: 'drug', drugs: ['pantoprazole', 'omeprazole'], label: 'High-dose IV proton pump inhibitor', withinMin: 45, critical: true, points: 10 },
       { id: 'stop_nsaids', type: 'procedure', label: 'Stop NSAIDs permanently', withinMin: 30, points: 5 },
       { id: 'endoscopy', type: 'procedure', label: 'Endoscopy within 24h (ideally <12h after resuscitation)', withinMin: 720, critical: true, points: 12 },
